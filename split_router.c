@@ -93,8 +93,8 @@ void* ping(void* p) {
     
     if(!recent(send_timer_2, 1)) {
       gettimeofday(&send_timer_2, NULL);
-      ip->ip_src.s_addr = inet_addr(SRC_IP_1);
-      ip->ip_dst.s_addr = inet_addr(DST_IP_1);
+      ip->ip_src.s_addr = inet_addr(SRC_IP_2);
+      ip->ip_dst.s_addr = inet_addr(DST_IP_2);
       ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
       sin.sin_addr.s_addr = ip->ip_dst.s_addr;
       if (sendto(raw_socket, ip, 20, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0)  {
