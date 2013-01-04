@@ -88,7 +88,7 @@ void* ping(void* p) {
         perror("sendto");
         return(NULL);
       }
-      printf("Ping 1\n");
+//      printf("Ping 1\n");
     }
     
     if(!recent(send_timer_2, 1)) {
@@ -101,7 +101,7 @@ void* ping(void* p) {
         perror("sendto");
         return(NULL);
       }
-      printf("Ping 2\n");
+//      printf("Ping 2\n");
     }
   }
 }
@@ -171,7 +171,7 @@ int main() {
   while(poll(fds, 2, -1)) {
     if(fds[0].revents) {
       // Receive a packet from the TUN interface
-      printf("Received TUN data\n");
+//      printf("Received TUN data\n");
       
       received_packet_size = read(tun_fd, receive_buffer, 1500);
       
@@ -234,7 +234,6 @@ int main() {
         ip->ip_hl = 0x5;
         ip->ip_v = 0x4;
         ip->ip_tos = 0x0;
-        printf("%i\n", 20 + header_size + full_data_size - half_data_size);
         ip->ip_len = htons(20 + header_size + full_data_size - half_data_size);
         ip->ip_id = 0x0;
         ip->ip_off = 0x0;
@@ -275,7 +274,7 @@ int main() {
         }
         gettimeofday(&send_timer_2, NULL);
       } else {
-        printf("No active peer to send packet.\n");
+//        printf("No active peer to send packet.\n");
       }
     }
     
@@ -284,11 +283,11 @@ int main() {
       received_packet_size = recvfrom(raw_socket, receive_buffer, 1500, 0, (struct sockaddr *)&sin, &len);
       // If it's empty, it's a ping
       if(received_packet_size > 20) {
-        printf("Received encapsulated data\n");
+//        printf("Received encapsulated data\n");
         // If it contains data, pass to the OS
         write(tun_fd, receive_buffer + 20, received_packet_size - 20);
       } else {
-        printf("Received ping\n");
+//        printf("Received ping\n");
       }
       // See where the packet came from and update the appropriate receive timer
       ip = (struct ip*)receive_buffer;
