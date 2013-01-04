@@ -16,15 +16,13 @@
 #include <netinet/ip.h>
 #include <netinet/in.h>
 
+#include "config.h"
+
 // LINK 1
-#define SRC_IP_1 "192.168.0.7"
-#define DST_IP_1 "1.1.1.1"
 struct timeval send_timer_1;
 struct timeval recv_timer_1;
 
 // LINK 2
-#define SRC_IP_2 "192.168.0.7"
-#define DST_IP_2 "2.2.2.2"
 struct timeval send_timer_2;
 struct timeval recv_timer_2;
 
@@ -163,6 +161,8 @@ int main() {
   int full_data_size;
   int half_data_size;
   int id = 1;
+  int conn1_up = 0;
+  int conn2_up = 0;
   
 	struct sockaddr_in sin;
   int len;
@@ -172,93 +172,111 @@ int main() {
     if(fds[0].revents) {
       // Receive a packet from the TUN interface
       printf("Received TUN data\n");
+      
       received_packet_size = read(tun_fd, receive_buffer, 1500);
       
-      // Calculate the data sizes
-      ip = (struct ip*)receive_buffer;
-      header_size = ip->ip_hl * 4;
-      full_data_size = received_packet_size - header_size;
-      half_data_size = (full_data_size / 16) * 8;
-      
-      // Set up the first packet to be transmitted
-      ip = (struct ip*)send_buffer;
-      ip->ip_hl = 0x5;
-      ip->ip_v = 0x4;
-      ip->ip_tos = 0x0;
-      ip->ip_len = htons(20 + header_size + half_data_size);
-      ip->ip_id = 0x0;
-      ip->ip_off = 0x0;
-      ip->ip_ttl = 64;
-      ip->ip_p = 4;
-      ip->ip_sum = 0x0;
-      ip->ip_src.s_addr = inet_addr(SRC_IP_1);
-      ip->ip_dst.s_addr = inet_addr(DST_IP_1);
-      ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
-      
-      // Copy half of the original packet into place
-      memcpy(send_buffer + 20, receive_buffer, header_size + half_data_size);
-      
-      // Modify the duplicate packet to mark as fragmented
-      ip = (struct ip*)send_buffer + 1;
-      if(!ip->ip_id) {
-        ip->ip_id = htons(++id);
+      conn1_up = recent(recv_timer_1, 1);
+      conn2_up = recent(recv_timer_2, 1);
+      if(conn1_up || conn2_up) {
+        
+        // Calculate the data sizes
+        ip = (struct ip*)receive_buffer;
+        header_size = ip->ip_hl * 4;
+        full_data_size = received_packet_size - header_size;
+        half_data_size = (full_data_size / 16) * 8;
+        
+        // Set up the first packet to be transmitted
+        ip = (struct ip*)send_buffer;
+        ip->ip_hl = 0x5;
+        ip->ip_v = 0x4;
+        ip->ip_tos = 0x0;
+        ip->ip_len = htons(20 + header_size + half_data_size);
+        ip->ip_id = 0x0;
+        ip->ip_off = 0x0;
+        ip->ip_ttl = 64;
+        ip->ip_p = 4;
+        ip->ip_sum = 0x0;
+        if(conn1_up) {
+          ip->ip_src.s_addr = inet_addr(SRC_IP_1);
+          ip->ip_dst.s_addr = inet_addr(DST_IP_1);
+        } else {
+          ip->ip_src.s_addr = inet_addr(SRC_IP_2);
+          ip->ip_dst.s_addr = inet_addr(DST_IP_2);
+        }
+        ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
+        
+        // Copy half of the original packet into place
+        memcpy(send_buffer + 20, receive_buffer, header_size + half_data_size);
+        
+        // Modify the duplicate packet to mark as fragmented
+        ip = (struct ip*)send_buffer + 1;
+        if(!ip->ip_id) {
+          ip->ip_id = htons(++id);
+        }
+        ip->ip_off = 0x20;
+        ip->ip_len = htons(header_size + half_data_size);
+        ip->ip_sum = 0x0;
+        ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
+        
+        // Transmit the packet
+        ip = (struct ip*)send_buffer;
+        memset(&sin, 0, sizeof(sin));
+        sin.sin_family = AF_INET;
+        sin.sin_addr.s_addr = ip->ip_dst.s_addr;
+        if (sendto(raw_socket, send_buffer, 20 + header_size + half_data_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0)  {
+          perror("sendto");
+          return(1);
+        }
+        gettimeofday(&send_timer_1, NULL);
+        
+        // Set up the second packet to be transmitted
+        ip = (struct ip*)send_buffer;
+        ip->ip_hl = 0x5;
+        ip->ip_v = 0x4;
+        ip->ip_tos = 0x0;
+        printf("%i\n", 20 + header_size + full_data_size - half_data_size);
+        ip->ip_len = htons(20 + header_size + full_data_size - half_data_size);
+        ip->ip_id = 0x0;
+        ip->ip_off = 0x0;
+        ip->ip_ttl = 64;
+        ip->ip_p = 4;
+        ip->ip_sum = 0x0;
+        if(conn2_up) {
+          ip->ip_src.s_addr = inet_addr(SRC_IP_2);
+          ip->ip_dst.s_addr = inet_addr(DST_IP_2);
+        } else {
+          ip->ip_src.s_addr = inet_addr(SRC_IP_1);
+          ip->ip_dst.s_addr = inet_addr(DST_IP_1);
+        }
+        ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
+        
+        // Copy second half of the original packet into place
+        memcpy(send_buffer + 20 + header_size, receive_buffer + header_size + half_data_size, full_data_size - half_data_size);
+        
+        // Build the second half of thefragmented packet
+        memcpy(send_buffer + 20, receive_buffer, header_size);
+        ip = (struct ip*)send_buffer + 1;
+        if(!ip->ip_id) {
+          ip->ip_id = htons(id);
+        }
+        ip->ip_len = htons(header_size + full_data_size - half_data_size);
+        ip->ip_off = htons(half_data_size / 8);
+        ip->ip_sum = 0x0;
+        ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
+        
+        // Transmit the packet
+        ip = (struct ip*)send_buffer;
+        memset(&sin, 0, sizeof(sin));
+        sin.sin_family = AF_INET;
+        sin.sin_addr.s_addr = ip->ip_dst.s_addr;
+        if (sendto(raw_socket, send_buffer, 20 + header_size + full_data_size - half_data_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0)  {
+          perror("sendto");
+          return(1);
+        }
+        gettimeofday(&send_timer_2, NULL);
+      } else {
+        printf("No active peer to send packet.\n");
       }
-      ip->ip_off = 0x20;
-      ip->ip_len = htons(header_size + half_data_size);
-      ip->ip_sum = 0x0;
-      ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
-      
-      // Transmit the packet
-      ip = (struct ip*)send_buffer;
-      memset(&sin, 0, sizeof(sin));
-      sin.sin_family = AF_INET;
-      sin.sin_addr.s_addr = ip->ip_dst.s_addr;
-      if (sendto(raw_socket, send_buffer, 20 + header_size + half_data_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0)  {
-        perror("sendto");
-        return(1);
-      }
-      gettimeofday(&send_timer_1, NULL);
-      
-      // Set up the second packet to be transmitted
-      ip = (struct ip*)send_buffer;
-      ip->ip_hl = 0x5;
-      ip->ip_v = 0x4;
-      ip->ip_tos = 0x0;
-      printf("%i\n", 20 + header_size + full_data_size - half_data_size);
-      ip->ip_len = htons(20 + header_size + full_data_size - half_data_size);
-      ip->ip_id = 0x0;
-      ip->ip_off = 0x0;
-      ip->ip_ttl = 64;
-      ip->ip_p = 4;
-      ip->ip_sum = 0x0;
-      ip->ip_src.s_addr = inet_addr(SRC_IP_2);
-      ip->ip_dst.s_addr = inet_addr(DST_IP_2);
-      ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
-      
-      // Copy second half of the original packet into place
-      memcpy(send_buffer + 20 + header_size, receive_buffer + header_size + half_data_size, full_data_size - half_data_size);
-      
-      // Build the second half of thefragmented packet
-      memcpy(send_buffer + 20, receive_buffer, header_size);
-      ip = (struct ip*)send_buffer + 1;
-      if(!ip->ip_id) {
-        ip->ip_id = htons(id);
-      }
-      ip->ip_len = htons(header_size + full_data_size - half_data_size);
-      ip->ip_off = htons(half_data_size / 8);
-      ip->ip_sum = 0x0;
-      ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
-      
-      // Transmit the packet
-      ip = (struct ip*)send_buffer;
-      memset(&sin, 0, sizeof(sin));
-      sin.sin_family = AF_INET;
-      sin.sin_addr.s_addr = ip->ip_dst.s_addr;
-      if (sendto(raw_socket, send_buffer, 20 + header_size + full_data_size - half_data_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0)  {
-        perror("sendto");
-        return(1);
-      }
-      gettimeofday(&send_timer_2, NULL);
     }
     
     if(fds[1].revents) {

@@ -1,0 +1,5 @@
+#define SRC_IP_1 "192.168.0.7"
+#define DST_IP_1 "1.1.1.1"
+#define SRC_IP_2 "192.168.0.7"
+#define DST_IP_2 "2.2.2.2"
+
