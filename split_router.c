@@ -118,8 +118,8 @@ int main() {
   pthread_create(&ping_thread, NULL, ping, NULL);
   
   // Receive and transmit buffers
-  char receive_buffer[1504];
-  char send_buffer[770];
+  char receive_buffer[9004];
+  char send_buffer[9004];
   
   // An IP pointer we can use to populate or modify packets
   struct ip *ip;
@@ -173,7 +173,7 @@ int main() {
       // Receive a packet from the TUN interface
 //      printf("Received TUN data\n");
       
-      received_packet_size = read(tun_fd, receive_buffer, 1500);
+      received_packet_size = read(tun_fd, receive_buffer, 9000);
       
       conn1_up = recent(recv_timer_1, 1);
       conn2_up = recent(recv_timer_2, 1);
@@ -280,7 +280,7 @@ int main() {
     
     if(fds[1].revents) {
       // Receive an encapsulated packet
-      received_packet_size = recvfrom(raw_socket, receive_buffer, 1500, 0, (struct sockaddr *)&sin, &len);
+      received_packet_size = recvfrom(raw_socket, receive_buffer, 9000, 0, (struct sockaddr *)&sin, &len);
       // If it's empty, it's a ping
       if(received_packet_size > 20) {
 //        printf("Received encapsulated data\n");
