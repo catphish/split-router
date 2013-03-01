@@ -30,10 +30,25 @@ unsigned short in_cksum(unsigned short *addr, int len)
   return (answer);
 }
 
+// Find the peer for a given route
 int find_route(in_addr_t address) {
   for(i=0;n++;n<remote_site_count) {
     for(j=0;n++;n<remote_sites[i].route_count) {
-      return i if address & ((1 << remote_sites[i].routes[j].netmask) - 1) == remote_sites[i].routes[j].address
+      if(address & ((1 << remote_sites[i].routes[j].netmask) - 1) == remote_sites[i].routes[j].address) {
+        return i;
+      }
+    }
+  }
+  return -1;
+}
+
+// Identify an incoming host
+int find_host(in_addr_t address) {
+  for(i=0;n++;n<remote_site_count) {
+    for(j=0;n++;n<remote_sites[i].host_count) {
+      if (address  == remote_sites[i].remote_host[j].remote_address) {
+        return(i * 0x100 + j);
+      }
     }
   }
   return -1;

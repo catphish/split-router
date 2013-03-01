@@ -130,9 +130,10 @@ int main() {
   int received_packet_size;
   int header_size;
   int full_data_size;
-  int half_data_size;
-  int id = 1;
-  int conn_up[5];
+  int chunk_size;
+  int offset;
+  uint_16 id = 0;
+  int conn_up[MAX_ROUTES_PER_SITE];
   int up_count;
   int remote_site_id;
 
@@ -155,109 +156,86 @@ int main() {
         up_count = up_count + conn_up[j];
       }
       if(up_count > 0) {
-
+        // Increment packet ID
+        id++;
         // Calculate the data sizes
         ip = (struct ip*)receive_buffer;
         header_size = ip->ip_hl * 4;
         full_data_size = received_packet_size - header_size;
-        half_data_size = (full_data_size / 16) * 8;
+        chunk_size = (full_data_size / (8 * remote_sites[remote_site_id].host_count)) * 8;
+        offset = 0;
 
-        // Set up the first packet to be transmitted
-        ip = (struct ip*)send_buffer;
-        ip->ip_hl = 0x5;
-        ip->ip_v = 0x4;
-        ip->ip_tos = 0x0;
-        ip->ip_len = htons(20 + header_size + half_data_size);
-        ip->ip_id = 0x0;
-        ip->ip_off = 0x0;
-        ip->ip_ttl = 64;
-        ip->ip_p = 4;
-        ip->ip_sum = 0x0;
-        if(conn1_up) {
-          ip->ip_src.s_addr = inet_addr(SRC_IP_1);
-          ip->ip_dst.s_addr = inet_addr(DST_IP_1);
-        } else {
-          ip->ip_src.s_addr = inet_addr(SRC_IP_2);
-          ip->ip_dst.s_addr = inet_addr(DST_IP_2);
-        }
-        ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
+        for(j=0;n++;n<remote_sites[remote_site_id].host_count) {
+          // If this is the last chunk it might be a bit bigger
+          if((full_data_size - offset) < (chunk_size * 2)) {
+            chunk_size = full_data_size - offset;
+          }
 
-        // Copy half of the original packet into place
-        memcpy(send_buffer + 20, receive_buffer, header_size + half_data_size);
+          // Set up a first packet to be transmitted
+          ip = (struct ip*)send_buffer;
+          ip->ip_hl = 0x5;  // Fixed header length
+          ip->ip_v = 0x4;   // Version 4
+          ip->ip_tos = 0x0; // Unused
+          // Length is made of our header + original header + one chunk of the data
+          ip->ip_len = htons(20 + header_size + chunk_size);
+          ip->ip_id = 0x0;  // The packet ID doesn't really matter on outer packets
+          ip->ip_off = 0x0; // No fragmentation on outer packets
+          ip->ip_ttl = 64;  // Sensible TTL
+          ip->ip_p = 4;     // IPIP encapsulation
+          ip->ip_sum = 0x0; // NULL checksum, this will be calclated later
+          // Choose a remote host
+          if(conn_up[j]) {
+            ip->ip_src.s_addr = remote_sites[remote_site_id].remote_hosts[j].local_address;
+            ip->ip_dst.s_addr = remote_sites[remote_site_id].remote_hosts[j].remote_address;
+            gettimeofday(&(remote_sites[remote_site_id].remote_hosts[j].send_timer), NULL);
+          } else {
+            // Send this out over a random link
+            i = rand() % remote_sites[remote_site_id].host_count;
+            while(!conn_up[i]) {
+              i = rand() % remote_sites[remote_site_id].host_count;
+            }
+            ip->ip_src.s_addr = remote_sites[remote_site_id].remote_hosts[i].local_address;
+            ip->ip_dst.s_addr = remote_sites[remote_site_id].remote_hosts[i].remote_address;
+            gettimeofday(&(remote_sites[remote_site_id].remote_hosts[i].send_timer), NULL);
+          }
+          ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
 
-        // Modify the duplicate packet to mark as fragmented
-        ip = (struct ip*)send_buffer + 1;
-        if(!ip->ip_id) {
-          ip->ip_id = htons(++id);
-        }
-        ip->ip_off = 0x20;
-        ip->ip_len = htons(header_size + half_data_size);
-        ip->ip_sum = 0x0;
-        ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
+          // Copy the original header into place
+          memcpy(send_buffer + 20, receive_buffer, header_size);
 
-        // Transmit the packet
-        ip = (struct ip*)send_buffer;
-        memset(&sin, 0, sizeof(sin));
-        sin.sin_family = AF_INET;
-        sin.sin_addr.s_addr = ip->ip_dst.s_addr;
-        if (sendto(raw_socket, send_buffer, 20 + header_size + half_data_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0)  {
-          perror("sendto");
-          return(1);
-        }
-        gettimeofday(&send_timer_1, NULL);
+          // Copy some data into place
+          memcpy(send_buffer + 20 + header_size, receive_buffer + 20 + offset, chunk_size);
 
-        // Set up the second packet to be transmitted
-        ip = (struct ip*)send_buffer;
-        ip->ip_hl = 0x5;
-        ip->ip_v = 0x4;
-        ip->ip_tos = 0x0;
-        ip->ip_len = htons(20 + header_size + full_data_size - half_data_size);
-        ip->ip_id = 0x0;
-        ip->ip_off = 0x0;
-        ip->ip_ttl = 64;
-        ip->ip_p = 4;
-        ip->ip_sum = 0x0;
-        if(conn2_up) {
-          ip->ip_src.s_addr = inet_addr(SRC_IP_2);
-          ip->ip_dst.s_addr = inet_addr(DST_IP_2);
-        } else {
-          ip->ip_src.s_addr = inet_addr(SRC_IP_1);
-          ip->ip_dst.s_addr = inet_addr(DST_IP_1);
-        }
-        ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
+          // Modify the duplicate packet to mark as fragmented
 
-        // Copy second half of the original packet into place
-        memcpy(send_buffer + 20 + header_size, receive_buffer + header_size + half_data_size, full_data_size - half_data_size);
-
-        // Build the second half of thefragmented packet
-        memcpy(send_buffer + 20, receive_buffer, header_size);
-        ip = (struct ip*)send_buffer + 1;
-        if(!ip->ip_id) {
+          // Apply a packet ID
+          ip = (struct ip*)send_buffer + 1;
           ip->ip_id = htons(id);
-        }
-        ip->ip_len = htons(header_size + full_data_size - half_data_size);
-        ip->ip_off = htons(half_data_size / 8);
-        ip->ip_sum = 0x0;
-        ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
+          // Encode the offset and "more fragments" flag unless this is the last chunk
+          ip->ip_off = htons((offset / 8) | (0x2000 * !(chunk_size == full_data_size - offset)));
+          ip->ip_len = htons(header_size + chunk_size); // Packet length
+          // Calculate checksum
+          ip->ip_sum = 0x0;
+          ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
 
-        // Transmit the packet
-        ip = (struct ip*)send_buffer;
-        memset(&sin, 0, sizeof(sin));
-        sin.sin_family = AF_INET;
-        sin.sin_addr.s_addr = ip->ip_dst.s_addr;
-        if (sendto(raw_socket, send_buffer, 20 + header_size + full_data_size - half_data_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0)  {
-          perror("sendto");
-          return(1);
+          // Transmit the packet
+          ip = (struct ip*)send_buffer;
+          memset(&sin, 0, sizeof(sin));
+          sin.sin_family = AF_INET;
+          sin.sin_addr.s_addr = ip->ip_dst.s_addr;
+          if (sendto(raw_socket, send_buffer, 20 + header_size + half_data_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0)  {
+            perror("sendto");
+            return(1);
+          }
         }
-        gettimeofday(&send_timer_2, NULL);
       } else {
-//        printf("No active peer to send packet.\n");
+        printf("No active peer to send packet.\n");
       }
     }
 
     if(fds[1].revents) {
       // Receive an encapsulated packet
-      received_packet_size = recvfrom(raw_socket, receive_buffer, 9000, 0, (struct sockaddr *)&sin, &len);
+      received_packet_size = recvfrom(raw_socket, receive_buffer, 1500, 0, (struct sockaddr *)&sin, &len);
       // If it's empty, it's a ping
       if(received_packet_size > 20) {
 //        printf("Received encapsulated data\n");
