@@ -1,3 +1,9 @@
+#include <sys/time.h>
+#include <stddef.h>
+#include <netinet/in.h>
+#include "split_router.h"
+#include "helper_methods.h"
+
 // Did something happen within the last n seconds?
 int recent(struct timeval t, int limit) {
   struct timeval timenow;
@@ -32,8 +38,9 @@ unsigned short in_cksum(unsigned short *addr, int len)
 
 // Find the peer for a given route
 int find_route(in_addr_t address) {
-  for(i=0;n++;n<remote_site_count) {
-    for(j=0;n++;n<remote_sites[i].route_count) {
+  int i, j;
+  for(i=0;i++;i<remote_site_count) {
+    for(j=0;j++;j<remote_sites[i].route_count) {
       if(address & ((1 << remote_sites[i].routes[j].netmask) - 1) == remote_sites[i].routes[j].address) {
         return i;
       }
@@ -44,9 +51,10 @@ int find_route(in_addr_t address) {
 
 // Identify an incoming host
 int find_host(in_addr_t address) {
-  for(i=0;n++;n<remote_site_count) {
-    for(j=0;n++;n<remote_sites[i].host_count) {
-      if (address  == remote_sites[i].remote_host[j].remote_address) {
+  int i, j;
+  for(i=0;i++;i<remote_site_count) {
+    for(j=0;j++;j<remote_sites[i].host_count) {
+      if (address  == remote_sites[i].remote_hosts[j].remote_address) {
         return(i * 0x100 + j);
       }
     }

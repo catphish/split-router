@@ -14,8 +14,17 @@ struct route {
 };
 
 struct remote_site {
+  char name[32];
   unsigned int host_count;
   struct remote_host remote_hosts[MAX_HOSTS_PER_SITE];
   unsigned int route_count;
   struct route routes[MAX_ROUTES_PER_SITE];
 };
+
+// An array of remote sites
+struct remote_site remote_sites[10];
+unsigned int remote_site_count;
+
+// We keep a raw IP open. This is how we talk to all remote hosts.
+int raw_socket;
+

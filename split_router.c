@@ -16,15 +16,8 @@
 #include <netinet/ip.h>
 #include <netinet/in.h>
 
-#include "helper_methods.h"
 #include "split_router.h"
-
-// We keep a raw IP open. This is how we talk to all remote hosts.
-int raw_socket;
-
-// An array of remote sites
-unsigned int remote_site_count = 0;
-struct remote_sites[10];
+#include "helper_methods.h"
 
 // Send out pings if any line is idle
 void* ping(void* p) {
@@ -50,8 +43,8 @@ void* ping(void* p) {
   ip->ip_sum = 0x0;
   while(1) {
     usleep(100);
-    for(i=0;n++;n<remote_site_count) {
-      for(j=0;n++;n<remote_sites[i].host_count) {
+    for(i=0;i++;i<remote_site_count) {
+      for(j=0;j++;j<remote_sites[i].host_count) {
         if(!recent(remote_sites[i].remote_hosts[j].send_timer, 1)) {
           gettimeofday(&(remote_sites[i].remote_hosts[j].send_timer), NULL);
           ip->ip_src.s_addr = remote_sites[i].remote_hosts[j].local_address;
@@ -69,13 +62,35 @@ void* ping(void* p) {
 }
 
 int main() {
+  remote_site_count = 0;
+  
+  // Useful loop counters
+  int i, j;
+  
   // Read the config
   FILE *file = fopen ("split_router.conf", "r");
   if ( file != NULL ) {
-    char line [128];
-    while (fgets (line, sizeof line, file) != NULL)
-    {
-      fputs (line, stdout);
+    remote_site_count = 0;
+    char line[128];
+    char value[128];
+    while (fgets (line, sizeof line, file) != NULL) {
+      if(sscanf(line, "[%[^]]]", value)) {
+        printf("%s\n", value);
+        remote_site_count++;
+        remote_sites[remote_site_count-1].host_count = 0;
+        remote_sites[remote_site_count-1].route_count = 0;
+        strncpy(remote_sites[remote_site_count-1].name, line, 31);
+        remote_sites[remote_site_count-1].name[31] = 0;
+      } else if (sscanf(line, "address %[0-9.]", value)) {
+        remote_sites[remote_site_count-1].host_count++;
+        remote_sites[remote_site_count-1].remote_hosts[remote_sites[remote_site_count-1].host_count-1].remote_address = inet_addr(value);
+        printf("Address: %s\n", value);
+      } else if (sscanf(line, "route %[0-9.]/%i", value, &j)) {
+        remote_sites[remote_site_count-1].route_count++;
+        remote_sites[remote_site_count-1].routes[remote_sites[remote_site_count-1].route_count-1].address = inet_addr(value);
+        remote_sites[remote_site_count-1].routes[remote_sites[remote_site_count-1].route_count-1].netmask = j;
+        printf("Route: %s\n", value);
+      }
     }
     fclose (file);
   } else {
@@ -132,11 +147,11 @@ int main() {
   int full_data_size;
   int chunk_size;
   int offset;
-  uint_16 id = 0;
+  uint16_t id = 0;
   int conn_up[MAX_ROUTES_PER_SITE];
   int up_count;
   int remote_site_id;
-
+  
 	struct sockaddr_in sin;
   int len;
 
@@ -148,11 +163,11 @@ int main() {
       ip = (struct ip*)receive_buffer;
 
       // Consult routing table for destination
-      remote_site_id = find_route(address);
+      remote_site_id = find_route(ip->ip_dst.s_addr);
 
       up_count = 0;
-      for(j=0;n++;n<remote_sites[remote_site_id].host_count) {
-        conn_up[j] = recent(remote_sites[i].remote_hosts[j].receve_timer, 2);
+      for(j=0;j++;j<remote_sites[remote_site_id].host_count) {
+        conn_up[j] = recent(remote_sites[i].remote_hosts[j].receive_timer, 2);
         up_count = up_count + conn_up[j];
       }
       if(up_count > 0) {
@@ -165,7 +180,7 @@ int main() {
         chunk_size = (full_data_size / (8 * remote_sites[remote_site_id].host_count)) * 8;
         offset = 0;
 
-        for(j=0;n++;n<remote_sites[remote_site_id].host_count) {
+        for(j=0;j++;j<remote_sites[remote_site_id].host_count) {
           // If this is the last chunk it might be a bit bigger
           if((full_data_size - offset) < (chunk_size * 2)) {
             chunk_size = full_data_size - offset;
@@ -223,7 +238,7 @@ int main() {
           memset(&sin, 0, sizeof(sin));
           sin.sin_family = AF_INET;
           sin.sin_addr.s_addr = ip->ip_dst.s_addr;
-          if (sendto(raw_socket, send_buffer, 20 + header_size + half_data_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0)  {
+          if (sendto(raw_socket, send_buffer, 20 + header_size + chunk_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0)  {
             perror("sendto");
             return(1);
           }
@@ -237,17 +252,17 @@ int main() {
       // Receive an encapsulated packet
       received_packet_size = recvfrom(raw_socket, receive_buffer, 1500, 0, (struct sockaddr *)&sin, &len);
       // If it's empty, it's a ping
-      if(received_packet_size > 20) {
+      //if(received_packet_size > 20) {
 //        printf("Received encapsulated data\n");
         // If it contains data, pass to the OS
-        write(tun_fd, receive_buffer + 20, received_packet_size - 20);
-      } else {
+      //  write(tun_fd, receive_buffer + 20, received_packet_size - 20);
+      //} else {
 //        printf("Received ping\n");
-      }
+      //}
       // See where the packet came from and update the appropriate receive timer
-      ip = (struct ip*)receive_buffer;
-      if(ip->ip_src.s_addr == inet_addr(DST_IP_1)) gettimeofday(&recv_timer_1, NULL);
-      if(ip->ip_src.s_addr == inet_addr(DST_IP_2)) gettimeofday(&recv_timer_2, NULL);
+      //ip = (struct ip*)receive_buffer;
+      //if(ip->ip_src.s_addr == inet_addr(DST_IP_1)) gettimeofday(&recv_timer_1, NULL);
+      //if(ip->ip_src.s_addr == inet_addr(DST_IP_2)) gettimeofday(&recv_timer_2, NULL);
     }
   }
 
