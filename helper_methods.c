@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <sys/time.h>
 #include <stddef.h>
 #include <netinet/in.h>
@@ -39,9 +40,13 @@ unsigned short in_cksum(unsigned short *addr, int len)
 // Find the peer for a given route
 int find_route(in_addr_t address) {
   int i, j;
-  for(i=0;i++;i<remote_site_count) {
-    for(j=0;j++;j<remote_sites[i].route_count) {
-      if(address & ((1 << remote_sites[i].routes[j].netmask) - 1) == remote_sites[i].routes[j].address) {
+  unsigned int route, mask, computed;
+  for(i=0;i<remote_site_count;i++) {
+    for(j=0;j<remote_sites[i].route_count;j++) {
+      route = ntohl(remote_sites[i].routes[j].address);
+      mask = (uint32_t)-1 << (32-remote_sites[i].routes[j].netmask);
+      computed = ntohl(address) & mask;
+      if(route == computed) {
         return i;
       }
     }
@@ -52,8 +57,8 @@ int find_route(in_addr_t address) {
 // Identify an incoming host
 int find_host(in_addr_t address) {
   int i, j;
-  for(i=0;i++;i<remote_site_count) {
-    for(j=0;j++;j<remote_sites[i].host_count) {
+  for(i=0;i<remote_site_count;i++) {
+    for(j=0;j<remote_sites[i].host_count;j++) {
       if (address  == remote_sites[i].remote_hosts[j].remote_address) {
         return(i * 0x100 + j);
       }

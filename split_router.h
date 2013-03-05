@@ -25,6 +25,10 @@ struct remote_site {
 struct remote_site remote_sites[10];
 unsigned int remote_site_count;
 
+// An array of local IPs
+in_addr_t local_addresses[10];
+unsigned int local_address_count;
+
 // We keep a raw IP open. This is how we talk to all remote hosts.
 int raw_socket;
 
