@@ -180,8 +180,8 @@ int main() {
       up_count = 0;
       printf("%i\n", remote_site_id);
       for(j=0;j<remote_sites[remote_site_id].host_count;j++) {
-        if(j==2) { conn_up[j] = 1; } else { conn_up[j] = 0; }
-        //conn_up[j] = 1; //recent(remote_sites[i].remote_hosts[j].receive_timer, 2);
+        //if(j==2) { conn_up[j] = 1; } else { conn_up[j] = 0; }
+        conn_up[j] = recent(remote_sites[i].remote_hosts[j].receive_timer, 2);
         up_count = up_count + conn_up[j];
       }
       if(up_count > 0) {
@@ -274,9 +274,13 @@ int main() {
         printf("Received ping\n");
       }
       // See where the packet came from and update the appropriate receive timer
-      //ip = (struct ip*)receive_buffer;
-      //if(ip->ip_src.s_addr == inet_addr(DST_IP_1)) gettimeofday(&recv_timer_1, NULL);
-      //if(ip->ip_src.s_addr == inet_addr(DST_IP_2)) gettimeofday(&recv_timer_2, NULL);
+      ip = (struct ip*)receive_buffer;
+      i = find_host(ip->ip_dst.s_addr);
+      if(i != -1) {
+        j = i & 0xff;
+        i = i >> 16;
+        gettimeofday(&(remote_sites[i].remote_hosts[j].receive_timer), NULL);
+      }
     }
   }
 
