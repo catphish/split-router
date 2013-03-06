@@ -39,7 +39,7 @@ void* ping(void* p) {
   ip->ip_id = 0x0;
   ip->ip_off = 0x0;
   ip->ip_ttl = 64;
-  ip->ip_p = 4;
+  ip->ip_p = 253;
   ip->ip_sum = 0x0;
   while(1) {
     usleep(100000);
@@ -124,7 +124,7 @@ int main() {
 
   // Set up the raw IP socket
   static int on = 1;
-  if ((raw_socket = socket(AF_INET, SOCK_RAW, 4)) < 0) {
+  if ((raw_socket = socket(AF_INET, SOCK_RAW, 253)) < 0) {
     perror("raw socket");
     return(1);
   }
@@ -210,7 +210,7 @@ int main() {
           ip->ip_id = 0x0;  // The packet ID doesn't really matter on outer packets
           ip->ip_off = 0x0; // No fragmentation on outer packets
           ip->ip_ttl = 64;  // Sensible TTL
-          ip->ip_p = 4;     // IPIP encapsulation
+          ip->ip_p = 253;   // IPIP encapsulation
           ip->ip_sum = 0x0; // NULL checksum, this will be calclated later
           // Choose a remote host
           if(conn_up[j]) {
