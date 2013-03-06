@@ -163,8 +163,7 @@ int main() {
   int conn_up[MAX_ROUTES_PER_SITE];
   int up_count;
   int remote_site_id;
-  
-	struct sockaddr_in sin;
+  struct sockaddr_in sin;
   int len;
 
   // Main loop, wait for data on either socket
@@ -263,6 +262,7 @@ int main() {
     }
 
     if(fds[1].revents) {
+        printf("aaaaaaaaaa\n");
       // Receive an encapsulated packet
       received_packet_size = recvfrom(raw_socket, receive_buffer, 1500, 0, (struct sockaddr *)&sin, &len);
       // If it's too small to be an IPIP packet, it's a ping
