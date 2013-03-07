@@ -1,7 +1,15 @@
+## The local section is required and specifies the local IP addresses we should bind to
+
 [local]
-address 77.92.66.19
-address 77.92.66.20
-[office]
-address 93.89.81.247
-address 93.89.81.248
-route 2.1.0.0/24
+address 192.0.2.1
+address 192.0.2.2
+
+## Additional sections define remote sites.
+## There must be no more remote addresses in a site than local addresses.
+## You should also specify routes for this connection.
+
+[My Remote Site]
+address 198.51.100.1
+address 198.51.100.2
+route 203.0.113.0/24
+

@@ -15,9 +15,35 @@
 
 #include <netinet/ip.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "split_router.h"
 #include "helper_methods.h"
+
+void* generate_statistics(void* p) {
+  int listenfd, clientfd, i, j, k;
+  socklen_t clientaddrlen;
+  struct sockaddr_in6 serveraddr, clientaddr;
+  
+  listenfd=socket(AF_INET6,SOCK_STREAM,0);
+  bzero(&serveraddr,sizeof(serveraddr));
+  serveraddr.sin6_family = AF_INET6;
+  serveraddr.sin6_addr = in6addr_loopback;
+  serveraddr.sin6_port = htons(24442);
+  bind(listenfd,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
+  listen(listenfd, 20);
+  while(1) {
+    clientfd = accept(listenfd, (struct sockaddr *)&clientaddr, &clientaddrlen);
+    for(i=0;i<remote_site_count;i++) {
+      dprintf(clientfd, "[%s]\n", remote_sites[i].name);
+      for(j=0;j<remote_sites[i].host_count;j++) {
+        k = remote_sites[i].remote_hosts[j].remote_address;
+        dprintf(clientfd, "%u.%u.%u.%u\n", *((char*)&k), *((char*)&k+1), *((char*)&k+2), *((char*)&k+3));
+      }
+    }
+    close(clientfd);
+  }
+}
 
 // Send out pings if any line is idle
 void* ping(void* p) {
@@ -84,7 +110,7 @@ int main() {
           remote_site_count++;
           remote_sites[remote_site_count-1].host_count = 0;
           remote_sites[remote_site_count-1].route_count = 0;
-          strncpy(remote_sites[remote_site_count-1].name, line, 31);
+          strncpy(remote_sites[remote_site_count-1].name, value, 31);
           remote_sites[remote_site_count-1].name[31] = 0;
         }
       } else if (sscanf(line, "address %[0-9.]", value)) {
@@ -114,6 +140,10 @@ int main() {
   // Set up the ping thread
   pthread_t ping_thread;
   pthread_create(&ping_thread, NULL, ping, NULL);
+
+  // Set up the stats thread
+  pthread_t stats_thread;
+  pthread_create(&stats_thread, NULL, generate_statistics, NULL);
 
   // Receive and transmit buffers
   char receive_buffer[1500];
@@ -175,109 +205,114 @@ int main() {
 
       // Consult routing table for destination
       remote_site_id = find_route(ip->ip_dst.s_addr);
-
-      up_count = 0;
-      for(j=0;j<remote_sites[remote_site_id].host_count;j++) {
-        //if(j==2) { conn_up[j] = 1; } else { conn_up[j] = 0; }
-        conn_up[j] = recent(remote_sites[i].remote_hosts[j].receive_timer, 2);
-        up_count = up_count + conn_up[j];
-      }
-      if(up_count > 0) {
-        // Increment packet ID
-        id++;
-        // Calculate the data sizes
-        ip = (struct ip*)receive_buffer;
-        header_size = ip->ip_hl * 4;
-        full_data_size = received_packet_size - header_size;
-        chunk_size = (full_data_size / (8 * remote_sites[remote_site_id].host_count)) * 8;
-        offset = 0;
-
+      if(remote_site_id != -1) {
+        up_count = 0;
         for(j=0;j<remote_sites[remote_site_id].host_count;j++) {
-          // If this is the last chunk it might be a bit bigger
-          if((full_data_size - offset) < (chunk_size * 2)) {
-            chunk_size = full_data_size - offset;
-          }
+          //if(j==2) { conn_up[j] = 1; } else { conn_up[j] = 0; }
+          conn_up[j] = recent(remote_sites[i].remote_hosts[j].receive_timer, 2);
+          up_count = up_count + conn_up[j];
+        }
+        if(up_count > 0) {
+          // Increment packet ID
+          id++;
+          // Calculate the data sizes
+          ip = (struct ip*)receive_buffer;
+          header_size = ip->ip_hl * 4;
+          full_data_size = received_packet_size - header_size;
+          chunk_size = (full_data_size / (8 * remote_sites[remote_site_id].host_count)) * 8;
+          offset = 0;
 
-          // Set up a first packet to be transmitted
-          ip = (struct ip*)send_buffer;
-          ip->ip_hl = 0x5;  // Fixed header length
-          ip->ip_v = 0x4;   // Version 4
-          ip->ip_tos = 0x0; // Unused
-          // Length is made of our header + original header + one chunk of the data
-          ip->ip_len = htons(20 + header_size + chunk_size);
-          ip->ip_id = 0x0;  // The packet ID doesn't really matter on outer packets
-          ip->ip_off = 0x0; // No fragmentation on outer packets
-          ip->ip_ttl = 64;  // Sensible TTL
-          ip->ip_p = 253;   // IPIP encapsulation
-          ip->ip_sum = 0x0; // NULL checksum, this will be calclated later
-          // Choose a remote host
-          if(conn_up[j]) {
-            ip->ip_src.s_addr = remote_sites[remote_site_id].remote_hosts[j].local_address;
-            ip->ip_dst.s_addr = remote_sites[remote_site_id].remote_hosts[j].remote_address;
-            gettimeofday(&(remote_sites[remote_site_id].remote_hosts[j].send_timer), NULL);
-          } else {
-            // Send this out over a random link
-            i = rand() % remote_sites[remote_site_id].host_count;
-            while(!conn_up[i]) {
-              i = rand() % remote_sites[remote_site_id].host_count;
+          for(j=0;j<remote_sites[remote_site_id].host_count;j++) {
+            // If this is the last chunk it might be a bit bigger
+            if((full_data_size - offset) < (chunk_size * 2)) {
+              chunk_size = full_data_size - offset;
             }
-            ip->ip_src.s_addr = remote_sites[remote_site_id].remote_hosts[i].local_address;
-            ip->ip_dst.s_addr = remote_sites[remote_site_id].remote_hosts[i].remote_address;
-            gettimeofday(&(remote_sites[remote_site_id].remote_hosts[i].send_timer), NULL);
+
+            // Set up a first packet to be transmitted
+            ip = (struct ip*)send_buffer;
+            ip->ip_hl = 0x5;  // Fixed header length
+            ip->ip_v = 0x4;   // Version 4
+            ip->ip_tos = 0x0; // Unused
+            // Length is made of our header + original header + one chunk of the data
+            ip->ip_len = htons(20 + header_size + chunk_size);
+            ip->ip_id = 0x0;  // The packet ID doesn't really matter on outer packets
+            ip->ip_off = 0x0; // No fragmentation on outer packets
+            ip->ip_ttl = 64;  // Sensible TTL
+            ip->ip_p = 253;   // IPIP encapsulation
+            ip->ip_sum = 0x0; // NULL checksum, this will be calclated later
+            // Choose a remote host
+            if(conn_up[j]) {
+              ip->ip_src.s_addr = remote_sites[remote_site_id].remote_hosts[j].local_address;
+              ip->ip_dst.s_addr = remote_sites[remote_site_id].remote_hosts[j].remote_address;
+              gettimeofday(&(remote_sites[remote_site_id].remote_hosts[j].send_timer), NULL);
+            } else {
+              // Send this out over a random link
+              i = rand() % remote_sites[remote_site_id].host_count;
+              while(!conn_up[i]) {
+                i = rand() % remote_sites[remote_site_id].host_count;
+              }
+              ip->ip_src.s_addr = remote_sites[remote_site_id].remote_hosts[i].local_address;
+              ip->ip_dst.s_addr = remote_sites[remote_site_id].remote_hosts[i].remote_address;
+              gettimeofday(&(remote_sites[remote_site_id].remote_hosts[i].send_timer), NULL);
+            }
+            ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
+
+            // Copy the original header into place
+            memcpy(send_buffer + 20, receive_buffer, header_size);
+
+            // Copy some data into place
+            memcpy(send_buffer + 20 + header_size, receive_buffer + 20 + offset, chunk_size);
+
+            // Modify the duplicate packet to mark as fragmented
+
+            // Apply a packet ID
+            ip = (struct ip*)send_buffer + 1;
+            ip->ip_id = htons(id);
+            // Encode the offset and "more fragments" flag unless this is the last chunk
+            ip->ip_off = htons((offset / 8) | (0x2000 * !(chunk_size == full_data_size - offset)));
+            ip->ip_len = htons(header_size + chunk_size); // Packet length
+            // Calculate checksum
+            ip->ip_sum = 0x0;
+            ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
+
+            // Transmit the packet
+            ip = (struct ip*)send_buffer;
+            memset(&sin, 0, sizeof(sin));
+            sin.sin_family = AF_INET;
+            sin.sin_addr.s_addr = ip->ip_dst.s_addr;
+            if (sendto(raw_socket, send_buffer, 20 + header_size + chunk_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0)  {
+              perror("sendto");
+              return(1);
+            }
           }
-          ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
-
-          // Copy the original header into place
-          memcpy(send_buffer + 20, receive_buffer, header_size);
-
-          // Copy some data into place
-          memcpy(send_buffer + 20 + header_size, receive_buffer + 20 + offset, chunk_size);
-
-          // Modify the duplicate packet to mark as fragmented
-
-          // Apply a packet ID
-          ip = (struct ip*)send_buffer + 1;
-          ip->ip_id = htons(id);
-          // Encode the offset and "more fragments" flag unless this is the last chunk
-          ip->ip_off = htons((offset / 8) | (0x2000 * !(chunk_size == full_data_size - offset)));
-          ip->ip_len = htons(header_size + chunk_size); // Packet length
-          // Calculate checksum
-          ip->ip_sum = 0x0;
-          ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
-
-          // Transmit the packet
-          ip = (struct ip*)send_buffer;
-          memset(&sin, 0, sizeof(sin));
-          sin.sin_family = AF_INET;
-          sin.sin_addr.s_addr = ip->ip_dst.s_addr;
-          if (sendto(raw_socket, send_buffer, 20 + header_size + chunk_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0)  {
-            perror("sendto");
-            return(1);
-          }
+        } else {
+          printf("No active peer to send packet\n");
         }
       } else {
-        printf("No active peer to send packet.\n");
+        printf("Ignoring packet for unknown remote\n");
       }
     }
 
     if(fds[1].revents) {
       // Receive an encapsulated packet
       received_packet_size = recvfrom(raw_socket, receive_buffer, 1500, 0, (struct sockaddr *)&sin, &len);
-      // If it's too small to be an IPIP packet, it's a ping
-      if(received_packet_size >= 40) {
-        printf("Received encapsulated data\n");
-        // If it contains data, pass to the OS
-        write(tun_fd, receive_buffer + 20, received_packet_size - 20);
-      } else {
-        printf("Received ping\n");
-      }
       // See where the packet came from and update the appropriate receive timer
       ip = (struct ip*)receive_buffer;
       i = find_host(ip->ip_dst.s_addr);
       if(i != -1) {
+        // If it's too small to be an IPIP packet, it's a ping
+        if(received_packet_size >= 40) {
+          printf("Received encapsulated data\n");
+          // If it contains data, pass to the OS
+          write(tun_fd, receive_buffer + 20, received_packet_size - 20);
+        } else {
+          printf("Received ping\n");
+        }
         j = i & 0xff;
         i = i >> 16;
         gettimeofday(&(remote_sites[i].remote_hosts[j].receive_timer), NULL);
+      } else {
+        printf("Ignoring packet from unknown source\n");
       }
     }
   }
