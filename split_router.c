@@ -177,7 +177,6 @@ int main() {
       remote_site_id = find_route(ip->ip_dst.s_addr);
 
       up_count = 0;
-      printf("%i\n", remote_site_id);
       for(j=0;j<remote_sites[remote_site_id].host_count;j++) {
         //if(j==2) { conn_up[j] = 1; } else { conn_up[j] = 0; }
         conn_up[j] = recent(remote_sites[i].remote_hosts[j].receive_timer, 2);
@@ -262,14 +261,13 @@ int main() {
     }
 
     if(fds[1].revents) {
-        printf("aaaaaaaaaa\n");
       // Receive an encapsulated packet
       received_packet_size = recvfrom(raw_socket, receive_buffer, 1500, 0, (struct sockaddr *)&sin, &len);
       // If it's too small to be an IPIP packet, it's a ping
       if(received_packet_size >= 40) {
         printf("Received encapsulated data\n");
         // If it contains data, pass to the OS
-      //  write(tun_fd, receive_buffer + 20, received_packet_size - 20);
+        write(tun_fd, receive_buffer + 20, received_packet_size - 20);
       } else {
         printf("Received ping\n");
       }
