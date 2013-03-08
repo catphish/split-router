@@ -24,7 +24,7 @@ void* generate_statistics(void* p) {
   int listenfd, clientfd, i, j, k;
   socklen_t clientaddrlen;
   struct sockaddr_in6 serveraddr, clientaddr;
-  
+
   listenfd=socket(AF_INET6,SOCK_STREAM,0);
   bzero(&serveraddr,sizeof(serveraddr));
   serveraddr.sin6_family = AF_INET6;
@@ -90,10 +90,10 @@ void* ping(void* p) {
 int main() {
   remote_site_count = 0;
   local_address_count = 0;
-  
+
   // Useful loop counters
   int i, j, local, local_count;
-  
+
   // Read the config
   FILE *file = fopen ("split_router.conf", "r");
   if ( file != NULL ) {
@@ -234,7 +234,7 @@ int main() {
           offset = 0;
 
           for(j=0;j<remote_sites[remote_site_id].host_count;j++) {
-            
+
             // If this is the last chunk it might be a bit bigger
             if((full_data_size - offset) < (chunk_size * 2)) {
               chunk_size = full_data_size - offset;
@@ -319,7 +319,7 @@ int main() {
       if(i != -1) {
         // If it's too small to be an IPIP packet, it's a ping
         if(received_packet_size >= 40) {
-          printf("Received encapsulated data\n");
+          //printf("Received encapsulated data\n");
           // If it contains data, pass to the OS
           write(tun_fd, receive_buffer + 20, received_packet_size - 20);
         } else {

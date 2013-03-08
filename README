@@ -1,0 +1,6 @@
+Not much documentation to speak of yet. Configure [local] and a remote.
+
+Start the app as root, bring the network interface and add the system routes:
+
+* ip link set tun0 up
+* ip route add 203.0.113.0/24 dev tun0
