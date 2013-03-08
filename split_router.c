@@ -222,7 +222,7 @@ int main() {
         }
         if(up_count > 0) {
           remote_sites[remote_site_id].out_packets++;
-          remote_sites[remote_site_id].out_byteoffsets += received_packet_size;
+          remote_sites[remote_site_id].out_bytes += received_packet_size;
 
           // Increment packet ID
           id++;
