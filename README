@@ -1,6 +1,11 @@
 Not much documentation to speak of yet. Configure [local] and a remote.
 
-Start the app as root, bring the network interface and add the system routes:
+Start the app as root, bring the network interface and add the system routes.
 
+You will need balanced routes through tun0, and you will need to specify external routes to ensure each remote goes through the appropriate connection eg:
+
+* ip route add 198.51.100.1 dev ppp0
+* ip route add 198.51.100.2 dev ppp1
+* nohup ./split_router &
 * ip link set tun0 up
 * ip route add 203.0.113.0/24 dev tun0
