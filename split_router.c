@@ -314,7 +314,7 @@ int main() {
       received_packet_size = recvfrom(raw_socket, receive_buffer, 1500, 0, (struct sockaddr *)&sin, &len);
       // See where the packet came from and update the appropriate receive timer
       ip = (struct ip*)receive_buffer;
-      i = find_host(ip->ip_dst.s_addr);
+      i = find_host(ip->ip_src.s_addr);
       if(i != -1) {
         // If it's too small to be an IPIP packet, it's a ping
         if(received_packet_size >= 40) {
