@@ -6,8 +6,10 @@ struct remote_host {
   struct timeval receive_timer;
   in_addr_t local_address;
   in_addr_t remote_address;
-  long long unsigned int packets;
-  long long unsigned int bytes;
+  long long unsigned int in_packets;
+  long long unsigned int in_bytes;
+  long long unsigned int out_packets;
+  long long unsigned int out_bytes;
 };
 
 struct route {
@@ -17,8 +19,10 @@ struct route {
 
 struct remote_site {
   char name[32];
-  long long unsigned int packets;
-  long long unsigned int bytes;
+  long long unsigned int in_packets;
+  long long unsigned int in_bytes;
+  long long unsigned int out_packets;
+  long long unsigned int out_bytes;
   unsigned int host_count;
   struct remote_host remote_hosts[MAX_HOSTS_PER_SITE];
   unsigned int route_count;

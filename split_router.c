@@ -35,10 +35,10 @@ void* generate_statistics(void* p) {
   while(1) {
     clientfd = accept(listenfd, (struct sockaddr *)&clientaddr, &clientaddrlen);
     for(i=0;i<remote_site_count;i++) {
-      dprintf(clientfd, "[%s]\n", remote_sites[i].name);
+      dprintf(clientfd, "[%s] %llu %llu %llu %llu\n", remote_sites[i].name, remote_sites[i].out_packets, remote_sites[i].in_packets, remote_sites[i].out_bytes, remote_sites[i].in_bytes);
       for(j=0;j<remote_sites[i].host_count;j++) {
         k = remote_sites[i].remote_hosts[j].remote_address;
-        dprintf(clientfd, "%u.%u.%u.%u\n", *((char*)&k), *((char*)&k+1), *((char*)&k+2), *((char*)&k+3));
+        dprintf(clientfd, "%u.%u.%u.%u %llu %llu %llu %llu\n", *((char*)&k), *((char*)&k+1), *((char*)&k+2), *((char*)&k+3), remote_sites[i].remote_hosts[j].out_packets, remote_sites[i].remote_hosts[j].in_packets, remote_sites[i].remote_hosts[j].out_bytes, remote_sites[i].in_bytes);
       }
     }
     close(clientfd);
@@ -108,6 +108,10 @@ int main() {
           printf("%s\n", value);
           local = 0;
           remote_site_count++;
+          remote_sites[remote_site_count-1].in_packets = 0;
+          remote_sites[remote_site_count-1].in_bytes = 0;
+          remote_sites[remote_site_count-1].out_packets = 0;
+          remote_sites[remote_site_count-1].out_bytes = 0;
           remote_sites[remote_site_count-1].host_count = 0;
           remote_sites[remote_site_count-1].route_count = 0;
           strncpy(remote_sites[remote_site_count-1].name, value, 31);
@@ -119,6 +123,10 @@ int main() {
           local_address_count++;
         } else {
           remote_sites[remote_site_count-1].host_count++;
+          remote_sites[remote_site_count-1].remote_hosts[remote_sites[remote_site_count-1].host_count-1].in_packets = 0;
+          remote_sites[remote_site_count-1].remote_hosts[remote_sites[remote_site_count-1].host_count-1].in_bytes = 0;
+          remote_sites[remote_site_count-1].remote_hosts[remote_sites[remote_site_count-1].host_count-1].out_packets = 0;
+          remote_sites[remote_site_count-1].remote_hosts[remote_sites[remote_site_count-1].host_count-1].out_bytes = 0;
           remote_sites[remote_site_count-1].remote_hosts[remote_sites[remote_site_count-1].host_count-1].remote_address = inet_addr(value);
           remote_sites[remote_site_count-1].remote_hosts[remote_sites[remote_site_count-1].host_count-1].local_address = local_addresses[remote_sites[remote_site_count-1].host_count-1];
           printf("Address: %s\n", value);
@@ -213,6 +221,9 @@ int main() {
           up_count = up_count + conn_up[j];
         }
         if(up_count > 0) {
+          remote_sites[remote_site_id].out_packets++;
+          remote_sites[remote_site_id].out_bytes += received_packet_size;
+
           // Increment packet ID
           id++;
           // Calculate the data sizes
@@ -223,6 +234,7 @@ int main() {
           offset = 0;
 
           for(j=0;j<remote_sites[remote_site_id].host_count;j++) {
+            
             // If this is the last chunk it might be a bit bigger
             if((full_data_size - offset) < (chunk_size * 2)) {
               chunk_size = full_data_size - offset;
@@ -232,7 +244,7 @@ int main() {
             ip = (struct ip*)send_buffer;
             ip->ip_hl = 0x5;  // Fixed header length
             ip->ip_v = 0x4;   // Version 4
-            ip->ip_tos = 0x0; // Unused
+            ip->ip_tos = 0x0; // Unusedremote_sites[remote_site_id].remote_hosts[j].
             // Length is made of our header + original header + one chunk of the data
             ip->ip_len = htons(20 + header_size + chunk_size);
             ip->ip_id = 0x0;  // The packet ID doesn't really matter on outer packets
@@ -245,6 +257,8 @@ int main() {
               ip->ip_src.s_addr = remote_sites[remote_site_id].remote_hosts[j].local_address;
               ip->ip_dst.s_addr = remote_sites[remote_site_id].remote_hosts[j].remote_address;
               gettimeofday(&(remote_sites[remote_site_id].remote_hosts[j].send_timer), NULL);
+              remote_sites[remote_site_id].remote_hosts[j].out_packets++;
+              remote_sites[remote_site_id].remote_hosts[j].out_bytes += (header_size + chunk_size);
             } else {
               // Send this out over a random link
               i = rand() % remote_sites[remote_site_id].host_count;
@@ -254,6 +268,8 @@ int main() {
               ip->ip_src.s_addr = remote_sites[remote_site_id].remote_hosts[i].local_address;
               ip->ip_dst.s_addr = remote_sites[remote_site_id].remote_hosts[i].remote_address;
               gettimeofday(&(remote_sites[remote_site_id].remote_hosts[i].send_timer), NULL);
+              remote_sites[remote_site_id].remote_hosts[i].out_packets++;
+              remote_sites[remote_site_id].remote_hosts[i].out_bytes += (header_size + chunk_size);
             }
             ip->ip_sum = in_cksum((unsigned short *)ip, sizeof(struct ip));
 
@@ -311,6 +327,10 @@ int main() {
         j = i & 0xff;
         i = i >> 16;
         gettimeofday(&(remote_sites[i].remote_hosts[j].receive_timer), NULL);
+        remote_sites[i].remote_hosts[j].in_packets++;
+        remote_sites[i].remote_hosts[j].in_bytes += (received_packet_size - 20);
+        remote_sites[i].in_packets++;
+        remote_sites[i].in_bytes += (received_packet_size - 20);
       } else {
         printf("Ignoring packet from unknown source\n");
       }
